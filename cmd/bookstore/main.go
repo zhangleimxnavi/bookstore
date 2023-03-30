@@ -13,15 +13,15 @@ import (
 )
 
 func main() {
-	
+
 	s, err := factory.New("mem")
 	//1、为啥直接 panic 了，记录日志也没啥用？？？
 	if err != nil {
 		panic(err)
 	}
-	
+
 	srv := server.NewBookStoreServer("192.168.30.58:8080", s)
-	
+
 	errChan, err := srv.ListenAndServe()
 	//如果启动后马上检出 err，那么可以认为是 web 启动错误
 	if err != nil {
@@ -29,13 +29,13 @@ func main() {
 		return
 	}
 	log.Println("web server start ok")
-	
+
 	c := make(chan os.Signal, 1)
 	//通过 signal 包的 Notify 捕获了 SIGINT、SIGTERM 这两个
 	//系统信号。这样，当这两个信号中的任何一个触发时，我们的 http 服务实例都有机会在退出
 	//前做一些清理工作。
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-	
+
 	select {
 	// web server 启动后，errChan有错误，可以看成是 web 运行时 错误
 	case err = <-errChan:
@@ -53,11 +53,11 @@ func main() {
 		//否则它返回关闭服务器的底层侦听器返回的任何错误。
 		err = srv.Shutdown(ctx)
 	}
-	
+
 	if err != nil {
 		log.Println("bookstore program exit error:", err)
 		return
 	}
 	log.Println("bookstore program exit ok")
-	
+
 }

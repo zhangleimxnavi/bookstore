@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
-	
+
 	"github.com/gorilla/mux"
 )
 
@@ -15,7 +15,7 @@ import (
 //Store 接口实例执行针对图书数据的相关操作。这里，我们抽象处理一个 server 包，这个包
 //中定义了一个 BookStoreServer
 
-//这个类型实质上就是一个标准库的 http.Server，并且组合了来自 store.Store 接口的能力。
+// 这个类型实质上就是一个标准库的 http.Server，并且组合了来自 store.Store 接口的能力。
 // BookStoreServer 由 store.Store 和 http.Server组合而成，拥有了二者的能力
 type BookStoreServer struct {
 	s   store.Store
@@ -36,7 +36,7 @@ func NewBookStoreServer(addr string, s store.Store) *BookStoreServer {
 			Addr: addr,
 		},
 	}
-	
+
 	//由于这个服务请求 URI 的模式字符串比较复杂，标准库 http 包内置的 URI 路径模式匹配器
 	//（ServeMux，也称为路由管理器）不能满足我们的需求，因此在这里，我们需要借助一个第
 	//三方包 github.com/gorilla/mux 来实现我们的需求。
@@ -46,18 +46,19 @@ func NewBookStoreServer(addr string, s store.Store) *BookStoreServer {
 	router.HandleFunc("/book/{id}", srv.getBookHandler).Methods("GET")
 	router.HandleFunc("/book", srv.getAllBooksHandler).Methods("GET")
 	router.HandleFunc("/book/{id}", srv.delBookHandler).Methods("DELETE")
-	
+
 	//我们在 router 的外围包裹了两层 middleware。什么是 middleware
 	//呢？对于我们的上下文来说，这些 middleware 就是一些通用的 http 处理函数。
-	
-	// 对 router 增加了 记录日志 和 验证的功能
+
+	// mux.Router 实现了 http.Handler 接口，因此它与标准的 http.ServeMux 兼容
+	//对 router 增加了 记录日志 和 验证的功能
 	srv.srv.Handler = middleware.Logging(middleware.Validating(router))
 	return srv
 }
 
-//这个函数把 BookStoreServer 内部的 http.Server 的运行，放置到一个单独的轻
-//量级线程 Goroutine 中。这是因为，http.Server.ListenAndServe 会阻塞代码的继续运行，
-//如果不把它放在单独的 Goroutine 中，后面的代码将无法得到执行。
+// 这个函数把 BookStoreServer 内部的 http.Server 的运行，放置到一个单独的轻
+// 量级线程 Goroutine 中。这是因为，http.Server.ListenAndServe 会阻塞代码的继续运行，
+// 如果不把它放在单独的 Goroutine 中，后面的代码将无法得到执行。
 func (bs *BookStoreServer) ListenAndServe() (<-chan error, error) {
 	var err error
 	//为了检测到 http.Server.ListenAndServe 的运行状态，我们再通过一个 channel
@@ -68,7 +69,7 @@ func (bs *BookStoreServer) ListenAndServe() (<-chan error, error) {
 		err = bs.srv.ListenAndServe()
 		errChan <- err
 	}()
-	
+
 	select {
 	//启动 go routine之后 马上检查，是否有err，有err，那么就是 启动 err，直接返回err
 	case err = <-errChan:
@@ -96,6 +97,8 @@ func (bs *BookStoreServer) createBookHandler(w http.ResponseWriter, req *http.Re
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	w.Write([]byte("create ok"))
 }
 
 func (bs *BookStoreServer) updateBookHandler(w http.ResponseWriter, req *http.Request) {
@@ -104,19 +107,20 @@ func (bs *BookStoreServer) updateBookHandler(w http.ResponseWriter, req *http.Re
 		http.Error(w, "no id found in request", http.StatusBadRequest)
 		return
 	}
-	
+
 	dec := json.NewDecoder(req.Body)
 	var book store.Book
 	if err := dec.Decode(&book); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	
+
 	book.Id = id
 	if err := bs.s.Update(&book); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	w.Write([]byte("update ok"))
 }
 
 func (bs *BookStoreServer) getBookHandler(w http.ResponseWriter, req *http.Request) {
@@ -125,13 +129,13 @@ func (bs *BookStoreServer) getBookHandler(w http.ResponseWriter, req *http.Reque
 		http.Error(w, "no id found in request", http.StatusBadRequest)
 		return
 	}
-	
+
 	book, err := bs.s.Get(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	
+
 	response(w, book)
 }
 
@@ -141,7 +145,7 @@ func (bs *BookStoreServer) getAllBooksHandler(w http.ResponseWriter, req *http.R
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	
+
 	response(w, books)
 }
 
@@ -151,20 +155,30 @@ func (bs *BookStoreServer) delBookHandler(w http.ResponseWriter, req *http.Reque
 		http.Error(w, "no id found in request", http.StatusBadRequest)
 		return
 	}
-	
+
 	err := bs.s.Delete(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	w.Write([]byte("delete ok"))
 }
 
 func response(w http.ResponseWriter, v interface{}) {
-	data, err := json.Marshal(v)
+	w.Header().Set("Content-Type", "application/json")
+
+	//使用 Encode 方式编码
+	err := json.NewEncoder(w).Encode(v)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	//使用 Marshal 方式编码
+	//data, err := json.Marshal(v)
+	//if err != nil {
+	//	http.Error(w, err.Error(), http.StatusInternalServerError)
+	//	return
+	//}
+	//w.Write(data)
+
 }
