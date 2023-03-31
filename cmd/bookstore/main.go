@@ -30,10 +30,10 @@ func main() {
 	}
 	log.Println("web server start ok")
 
-	c := make(chan os.Signal, 1)
 	//通过 signal 包的 Notify 捕获了 SIGINT、SIGTERM 这两个
 	//系统信号。这样，当这两个信号中的任何一个触发时，我们的 http 服务实例都有机会在退出
 	//前做一些清理工作。
+	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
@@ -44,7 +44,7 @@ func main() {
 	//当 c 中 能取出内容时候，证明发生了 syscall.SIGINT 或 syscall.SIGTERM
 	case <-c:
 		log.Println("bookstore program is exiting...")
-		ctx, cf := context.WithTimeout(context.Background(), time.Second)
+		ctx, cf := context.WithTimeout(context.Background(), time.Second*5)
 		//尽管ctx会过期，但在任何情况下调用它的cancel函数都是很好的实践，（如果 srv.Shutdown(ctx)的 业务 提前完成了，就可以立即结束了，否则至少需要等待 time.Second时间）
 		//如果不这样做，可能会使上下文及其父类存活的时间超过必要的时间
 		defer cf()
